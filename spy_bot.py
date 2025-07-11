@@ -218,7 +218,7 @@ async def start_round():
 
     await bot.send_message(game_data['chat_id'], "👥 Игроки в игре:\n" + "\n".join(f"• {name}" for name in names), parse_mode='HTML')
     await bot.send_message(game_data['chat_id'], "🗣️ Обсуждение началось. У вас есть 2 минуты!")
-    await asyncio.sleep(300)
+    await asyncio.sleep(120)
     await bot.send_message(game_data['chat_id'], "⏰ Время обсуждения закончилось! Переходим к голосованию.")
     await start_voting()
 
