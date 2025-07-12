@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from collections import defaultdict
 
-API_TOKEN = '7944223394:AAFJTGHXQ69W3biGnFRZj96vcbev2hsKoaI'
+API_TOKEN = os.getenv('API_TOKEN')
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
@@ -319,7 +319,7 @@ async def update_voting_message():
     for pid in game_data['players']:
         name = game_data['player_names'][pid]
         markup.add(InlineKeyboardButton(name, callback_data=f"vote_{pid}"))
-    markup.add(InlineKeyboardButton("Skip vote", callback_data="skip_vote"))
+    markup.add(InlineKeyboardButton("Пропустить", callback_data="skip_vote"))
     try:
         await bot.edit_message_text(
             text,
