@@ -1,20 +1,19 @@
-# Используем официальный легковесный образ Python 3.11
 FROM python:3.11-slim
 
-# Рабочая директория внутри контейнера
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
 WORKDIR /app
 
-# Копируем файл зависимостей в контейнер
+# Сначала зависимости — так Docker кэширует слой и не переустанавливает их при каждом изменении кода
 COPY requirements.txt .
-
-# Устанавливаем зависимости из requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем весь код проекта в контейнер
-COPY . .
+COPY spy_bot.py .
 
-# Переменная окружения для токена (можно переопределить при запуске контейнера)
-ENV API_TOKEN=""
+# Не запускаем бота от root
+RUN useradd --create-home bot
+USER bot
 
-# Команда запуска бота
+# API_TOKEN передаётся при запуске: docker run -e API_TOKEN=... spybot
 CMD ["python", "spy_bot.py"]
