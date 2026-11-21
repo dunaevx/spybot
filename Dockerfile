@@ -9,11 +9,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY spy_bot.py .
+COPY *.py ./
 
 # Не запускаем бота от root
-RUN useradd --create-home bot
+RUN useradd --create-home bot && mkdir -p /data && chown bot /data
 USER bot
+
+# Без DATABASE_URL статистика пишется в SQLite-файл
+ENV DB_PATH=/data/spybot.db
 
 # API_TOKEN передаётся при запуске: docker run -e API_TOKEN=... spybot
 CMD ["python", "spy_bot.py"]
