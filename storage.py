@@ -24,6 +24,11 @@ SCHEMA = [
 ]
 
 
+PG_CONNECT_ATTEMPTS = 20
+PG_RETRY_DELAY = 3
+PG_QUERY_ATTEMPTS = 4
+
+
 class Storage:
     def __init__(self, database_url: str | None, sqlite_path: str = "spybot.db"):
         self.database_url = database_url or ""
@@ -39,7 +44,17 @@ class Storage:
     async def init(self) -> None:
         if self.database_url.startswith(("postgres://", "postgresql://")):
             import asyncpg  # импорт здесь, чтобы без Postgres библиотека не требовалась
-            self.pg = await asyncpg.create_pool(self.database_url, min_size=1, max_size=3)
+            # Бесплатный Postgres на Railway засыпает без нагрузки и просыпается несколько секунд,
+            # поэтому подключаемся с повторными попытками.
+            for attempt in range(1, PG_CONNECT_ATTEMPTS + 1):
+                try:
+                    self.pg = await asyncpg.create_pool(self.database_url, min_size=0, max_size=3)
+                    break
+                except (OSError, asyncpg.PostgresError, asyncpg.InterfaceError) as e:
+                    if attempt == PG_CONNECT_ATTEMPTS:
+                        raise
+                    log.info("Postgres недоступен (%s), попытка %s/%s", e, attempt, PG_CONNECT_ATTEMPTS)
+                    await asyncio.sleep(PG_RETRY_DELAY)
         else:
             self.sqlite = sqlite3.connect(self.sqlite_path, check_same_thread=False)
             self.sqlite.row_factory = sqlite3.Row
@@ -60,16 +75,28 @@ class Storage:
         counter = iter(range(1, 1000))
         return re.sub(r"\?", lambda _: f"${next(counter)}", sql)
 
+    async def _pg_call(self, method: str, sql: str, *args):
+        """Запрос к Postgres с повторами, если база спит или соединение оборвалось."""
+        import asyncpg
+        for attempt in range(1, PG_QUERY_ATTEMPTS + 1):
+            try:
+                return await getattr(self.pg, method)(self._pg_sql(sql), *args)
+            except (OSError, asyncpg.PostgresConnectionError, asyncpg.InterfaceError) as e:
+                if attempt == PG_QUERY_ATTEMPTS:
+                    raise
+                log.info("Повтор запроса к Postgres (%s), попытка %s", e, attempt)
+                await asyncio.sleep(PG_RETRY_DELAY)
+
     async def _execute(self, sql: str, *args) -> None:
         if self.pg:
-            await self.pg.execute(self._pg_sql(sql), *args)
+            await self._pg_call("execute", sql, *args)
             return
         async with self._lock:
             await asyncio.to_thread(self._sqlite_run, sql, args, False)
 
     async def _fetch(self, sql: str, *args) -> list[dict]:
         if self.pg:
-            rows = await self.pg.fetch(self._pg_sql(sql), *args)
+            rows = await self._pg_call("fetch", sql, *args)
             return [dict(r) for r in rows]
         async with self._lock:
             return await asyncio.to_thread(self._sqlite_run, sql, args, True)
